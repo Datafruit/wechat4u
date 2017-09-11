@@ -11,9 +11,9 @@ let bot
  * 这里演示从本地文件中获取数据
  */
 try {
-  bot = new Wechat(require('./sync-data.json'))
+  bot = new Wechat(true)
 } catch (e) {
-  bot = new Wechat()
+  console.log(e.stack)
 }
 /**
  * 启动机器人
@@ -36,30 +36,40 @@ bot.on('uuid', uuid => {
 /**
  * 登录用户头像事件，手机扫描后可以得到登录用户头像的Data URL
  */
-bot.on('user-avatar', avatar => {
-  console.log('登录用户头像Data URL：', avatar)
-})
+// bot.on('user-avatar', avatar => {
+//   console.log('登录用户头像Data URL：', avatar)
+// })
 /**
  * 登录成功事件
  */
 bot.on('login', () => {
   console.log('登录成功')
   // 保存数据，将数据序列化之后保存到任意位置
-  fs.writeFileSync('./sync-data.json', JSON.stringify(bot.botData))
+  // fs.writeFileSync(syncDataPath, JSON.stringify(bot.botData))
 })
 /**
  * 登出成功事件
  */
 bot.on('logout', () => {
   console.log('登出成功')
-  // 清除数据
-  fs.unlinkSync('./sync-data.json')
+  // if (fs.exists(syncDataPath)) {
+  //   console.log('clear sync-data')
+  //   // 清除数据
+  //   fs.unlinkSync(syncDataPath)
+  // }
 })
 /**
  * 联系人更新事件，参数为被更新的联系人列表
  */
 bot.on('contacts-updated', contacts => {
-  console.log(contacts)
+  // console.log(contacts)
+  const groupList = contacts.filter(m => m.UserName.startsWith('@@'))
+  for (const obj of groupList) {
+    if (obj.NickName) {
+      console.log(obj.UserName, obj.NickName)
+      // console.log(obj, '======')
+    }
+  }
   console.log('联系人数量：', Object.keys(bot.contacts).length)
 })
 /**
@@ -76,25 +86,25 @@ bot.on('login', () => {
    * 演示发送消息到文件传输助手
    * 通常回复消息时可以用 msg.FromUserName
    */
-  let ToUserName = 'filehelper'
+  // let ToUserName = 'filehelper'
 
   /**
    * 发送文本消息，可以包含emoji(😒)和QQ表情([坏笑])
    */
-  bot.sendMsg('发送文本消息，可以包含emoji(😒)和QQ表情([坏笑])', ToUserName)
-    .catch(err => {
-      bot.emit('error', err)
-    })
+  // bot.sendMsg('发送文本消息，可以包含emoji(😒)和QQ表情([坏笑])', ToUserName)
+  //   .catch(err => {
+  //     bot.emit('error', err)
+  //   })
 
   /**
    * 通过表情MD5发送表情
    */
-  bot.sendMsg({
-    emoticonMd5: '00c801cdf69127550d93ca52c3f853ff'
-  }, ToUserName)
-    .catch(err => {
-      bot.emit('error', err)
-    })
+  // bot.sendMsg({
+  //   emoticonMd5: '00c801cdf69127550d93ca52c3f853ff'
+  // }, ToUserName)
+  //   .catch(err => {
+  //     bot.emit('error', err)
+  //   })
 
   /**
    * 以下通过上传文件发送图片，视频，附件等
@@ -113,58 +123,58 @@ bot.on('login', () => {
   /**
    * 发送图片
    */
-  bot.sendMsg({
-    file: request('https://raw.githubusercontent.com/nodeWechat/wechat4u/master/bot-qrcode.jpg'),
-    filename: 'bot-qrcode.jpg'
-  }, ToUserName)
-    .catch(err => {
-      bot.emit('error', err)
-    })
+  // bot.sendMsg({
+  //   file: request('https://raw.githubusercontent.com/nodeWechat/wechat4u/master/bot-qrcode.jpg'),
+  //   filename: 'bot-qrcode.jpg'
+  // }, ToUserName)
+  //   .catch(err => {
+  //     bot.emit('error', err)
+  //   })
 
   /**
    * 发送表情
    */
-  bot.sendMsg({
-    file: fs.createReadStream('./media/test.gif'),
-    filename: 'test.gif'
-  }, ToUserName)
-    .catch(err => {
-      bot.emit('error', err)
-    })
+  // bot.sendMsg({
+  //   file: fs.createReadStream('./media/test.gif'),
+  //   filename: 'test.gif'
+  // }, ToUserName)
+  //   .catch(err => {
+  //     bot.emit('error', err)
+  //   })
 
   /**
    * 发送视频
    */
-  bot.sendMsg({
-    file: fs.createReadStream('./media/test.mp4'),
-    filename: 'test.mp4'
-  }, ToUserName)
-    .catch(err => {
-      bot.emit('error', err)
-    })
+  // bot.sendMsg({
+  //   file: fs.createReadStream('./media/test.mp4'),
+  //   filename: 'test.mp4'
+  // }, ToUserName)
+  //   .catch(err => {
+  //     bot.emit('error', err)
+  //   })
 
   /**
    * 发送文件
    */
-  bot.sendMsg({
-    file: fs.createReadStream('./media/test.txt'),
-    filename: 'test.txt'
-  }, ToUserName)
-    .catch(err => {
-      bot.emit('error', err)
-    })
+  // bot.sendMsg({
+  //   file: fs.createReadStream('./media/test.txt'),
+  //   filename: 'test.txt'
+  // }, ToUserName)
+  //   .catch(err => {
+  //     bot.emit('error', err)
+  //   })
 
   /**
    * 发送撤回消息请求
    */
-  bot.sendMsg('测试撤回', ToUserName)
-     .then(res => {
-       // 需要取得待撤回消息的MsgID
-       return bot.revokeMsg(res.MsgID, ToUserName)
-     })
-     .catch(err => {
-       console.log(err)
-     })
+  // bot.sendMsg('测试撤回', ToUserName)
+  //    .then(res => {
+  //      // 需要取得待撤回消息的MsgID
+  //      return bot.revokeMsg(res.MsgID, ToUserName)
+  //    })
+  //    .catch(err => {
+  //      console.log(err)
+  //    })
 })
 /**
  * 如何处理会话消息
@@ -241,7 +251,7 @@ bot.on('message', msg => {
         console.log('文件消息，保存到本地')
         bot.getDoc(msg.FromUserName, msg.MediaId, msg.FileName).then(res => {
           fs.writeFileSync(`./media/${msg.FileName}`, res.data)
-          console.log(res.type);
+          console.log(res.type)
         }).catch(err => {
           bot.emit('error', err)
         })
@@ -255,7 +265,7 @@ bot.on('message', msg => {
  * 如何处理红包消息
  */
 bot.on('message', msg => {
-  if (msg.MsgType == bot.CONF.MSGTYPE_SYS && /红包/.test(msg.Content)) {
+  if (msg.MsgType === bot.CONF.MSGTYPE_SYS && /红包/.test(msg.Content)) {
     // 若系统消息中带有‘红包’，则认为是红包消息
     // wechat4u并不能自动收红包
   }
@@ -264,7 +274,7 @@ bot.on('message', msg => {
  * 如何处理转账消息
  */
 bot.on('message', msg => {
-  if (msg.MsgType == bot.CONF.MSGTYPE_APP && msg.AppMsgType == bot.CONF.APPMSGTYPE_TRANSFERS) {
+  if (msg.MsgType === bot.CONF.MSGTYPE_APP && msg.AppMsgType == bot.CONF.APPMSGTYPE_TRANSFERS) {
     // 转账
   }
 })
@@ -272,9 +282,9 @@ bot.on('message', msg => {
  * 如何处理撤回消息
  */
 bot.on('message', msg => {
-  if (msg.MsgType == bot.CONF.MSGTYPE_RECALLED) {
+  if (msg.MsgType === bot.CONF.MSGTYPE_RECALLED) {
     // msg.Content是一个xml，关键信息是MsgId
-    let MsgId = msg.Content.match(/<msgid>(.*?)<\/msgid>.*?<replacemsg><!\[CDATA\[(.*?)\]\]><\/replacemsg>/)[0]
+    // let MsgId = msg.Content.match(/<msgid>(.*?)<\/msgid>.*?<replacemsg><!\[CDATA\[(.*?)\]\]><\/replacemsg>/)[0]
     // 得到MsgId后，根据MsgId，从收到过的消息中查找被撤回的消息
   }
 })
@@ -282,7 +292,7 @@ bot.on('message', msg => {
  * 如何处理好友请求消息
  */
 bot.on('message', msg => {
-  if (msg.MsgType == bot.CONF.MSGTYPE_VERIFYMSG) {
+  if (msg.MsgType === bot.CONF.MSGTYPE_VERIFYMSG) {
     bot.verifyUser(msg.RecommendInfo.UserName, msg.RecommendInfo.Ticket)
       .then(res => {
         console.log(`通过了 ${bot.Contact.getDisplayName(msg.RecommendInfo)} 好友请求`)

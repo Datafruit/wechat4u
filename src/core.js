@@ -3,6 +3,7 @@ import bl from 'bl'
 import _debug from 'debug'
 import FormData from 'form-data'
 import mime from 'mime'
+import { storeSessionFile } from './util/global'
 import {
   getCONF,
   Request,
@@ -11,12 +12,13 @@ import {
   getClientMsgId,
   getDeviceID
 } from './util'
+import fs from 'fs'
 
 const debug = _debug('core')
 
 export default class WechatCore {
 
-  constructor (data) {
+  constructor (hotRelaod = false) {
     this.PROP = {
       uuid: '',
       uin: '',
@@ -32,8 +34,9 @@ export default class WechatCore {
     this.CONF = getCONF()
     this.COOKIE = {}
     this.user = {}
-    if (data) {
-      this.botData = data
+    this.botData = {}
+    if (hotRelaod) {
+      this.botData = this.getCookiesFromFile()
     }
 
     this.request = new Request({
@@ -54,6 +57,18 @@ export default class WechatCore {
     Object.keys(data).forEach(key => {
       Object.assign(this[key], data[key])
     })
+  }
+
+  getCookiesFromFile () {
+    try {
+      fs.statSync(storeSessionFile).isFile()
+    } catch (err) {
+      console.log('WeChatCore', 'getCookiesFromFile() no cookies: %s', err.message)
+      return null
+    }
+    const jsonStr = fs.readFileSync(storeSessionFile)
+    const cookies = JSON.parse(jsonStr.toString())
+    return cookies
   }
 
   getUUID () {
@@ -140,6 +155,9 @@ export default class WechatCore {
             }
           })
         }
+        // 保存数据，将数据序列化之后保存到任意位置
+        fs.writeFileSync(storeSessionFile, JSON.stringify(this.botData))
+        debug('登录成功')
       })
     }).catch(err => {
       debug(err)
@@ -410,6 +428,11 @@ export default class WechatCore {
         url: this.CONF.API_webwxlogout,
         params: params
       }).then(res => {
+        if (fs.exists(storeSessionFile)) {
+          console.log('clear hot-realod data')
+          // 清除数据
+          fs.unlinkSync(storeSessionFile)
+        }
         return '登出成功'
       }).catch(err => {
         debug(err)
@@ -503,8 +526,8 @@ export default class WechatCore {
     return Promise.resolve().then(() => {
       let name, type, size, ext, mediatype, data
       return new Promise((resolve, reject) => {
-        if ((typeof (File) !== 'undefined' && file.constructor == File) ||
-          (typeof (Blob) !== 'undefined' && file.constructor == Blob)) {
+        if ((typeof (File) !== 'undefined' && file.constructor === File) ||
+          (typeof (Blob) !== 'undefined' && file.constructor === Blob)) {
           name = file.name || 'file'
           type = file.type
           size = file.size
@@ -770,7 +793,7 @@ export default class WechatCore {
           'ClientMsgId': clientMsgId
         }
       }
-      let url, pm
+      let url
       switch (msg.MsgType) {
         case this.CONF.MSGTYPE_TEXT:
           url = this.CONF.API_webwxsendmsg
@@ -807,15 +830,21 @@ export default class WechatCore {
             `$1${msg.MediaId}$2`)
           break
         default:
-          throw new Error('该消息类型不能直接转发')
+          if (msg.MsgType !== this.CONF.MM_DATA_STATUSNOTIFY) {
+            throw new Error('该消息类型不能直接转发=>' + msg.MsgType)
+          }
+          break
+      }
+      if (!url) {
+        return
       }
       return this.request({
         method: 'POST',
-        url: url,
-        params: params,
-        data: data
+        url,
+        params,
+        data
       }).then(res => {
-        let data = res.data
+        const { data } = res
         assert.equal(data.BaseResponse.Ret, 0, res)
         return data
       })

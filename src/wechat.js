@@ -1,15 +1,12 @@
 import WechatCore from './core'
 import EventEmitter from 'events'
-
 import _ from 'lodash'
 import {
   getCONF,
   isStandardBrowserEnv
 } from './util'
-
 import ContactFactory from './interface/contact'
 import MessageFactory from './interface/message'
-
 import _debug from 'debug'
 const debug = _debug('wechat')
 
@@ -21,8 +18,8 @@ if (!isStandardBrowserEnv) {
 
 class Wechat extends WechatCore {
 
-  constructor (data) {
-    super(data)
+  constructor (hotReload = false) {
+    super(hotReload)
     _.extend(this, new EventEmitter())
     this.state = this.CONF.STATE.init
     this.contacts = {} // 所有联系人
@@ -116,17 +113,20 @@ class Wechat extends WechatCore {
     .then(res => {
       contacts = res.MemberList || []
       if (res.Seq) {
-        return this._getContact(res.Seq)
-        .then(_contacts => contacts = contacts.concat(_contacts || []))
+        return this._getContact(res.Seq).then(_contacts => {
+          contacts = contacts.concat(_contacts || [])
+          return contacts
+        })
       }
     })
     .then(() => {
-      if (Seq == 0) {
-        let emptyGroup =
-          contacts.filter(contact => contact.UserName.startsWith('@@') && contact.MemberCount == 0)
-        if (emptyGroup.length != 0) {
-          return this.batchGetContact(emptyGroup)
-          .then(_contacts => contacts = contacts.concat(_contacts || []))
+      if (Seq === 0) {
+        let emptyGroup = contacts.filter(contact => contact.UserName.startsWith('@@') && contact.MemberCount === 0) || []
+        if (emptyGroup.length !== 0) {
+          return this.batchGetContact(emptyGroup).then(_contacts => {
+            contacts = contacts.concat(_contacts || [])
+            return contacts
+          })
         } else {
           return contacts
         }
@@ -282,7 +282,7 @@ class Wechat extends WechatCore {
     data.forEach(msg => {
       Promise.resolve().then(() => {
         if (!this.contacts[msg.FromUserName] ||
-          (msg.FromUserName.startsWith('@@') && this.contacts[msg.FromUserName].MemberCount == 0)) {
+          (msg.FromUserName.startsWith('@@') && this.contacts[msg.FromUserName].MemberCount === 0)) {
           return this.batchGetContact([{
             UserName: msg.FromUserName
           }]).then(contacts => {
@@ -324,7 +324,7 @@ class Wechat extends WechatCore {
   }
 
   updateContacts (contacts) {
-    if (!contacts || contacts.length == 0) {
+    if (!contacts || contacts.length === 0) {
       return
     }
     contacts.forEach(contact => {

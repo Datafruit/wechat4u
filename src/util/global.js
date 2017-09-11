@@ -87,3 +87,18 @@ export function getClientMsgId () {
 export function getDeviceID () {
   return 'e' + ('' + Math.random().toFixed(15)).substring(2, 17)
 }
+
+export const RetCode = {
+  0: '正常',
+  2: '新的消息',
+  7: '进入/离开聊天界面',
+  1101: '其它地方登陆/登录超时',
+  1102: '退出/移动端退出',
+  1100: '失败/登出微信',
+  9999: '未知'
+}
+
+/**
+ * 登录状态保存文件
+ */
+export const storeSessionFile = 'store-wecaht.session.json'
