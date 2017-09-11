@@ -15,6 +15,7 @@ try {
 } catch (e) {
   console.log(e.stack)
 }
+
 /**
  * 启动机器人
  */
@@ -31,7 +32,7 @@ bot.on('uuid', uuid => {
   qrcode.generate('https://login.weixin.qq.com/l/' + uuid, {
     small: true
   })
-  console.log('二维码链接：', 'https://login.weixin.qq.com/qrcode/' + uuid)
+  console.log('请扫描二维码登录')
 })
 /**
  * 登录用户头像事件，手机扫描后可以得到登录用户头像的Data URL
@@ -322,3 +323,5 @@ bot.on('message', msg => {
     bot.emit('error', err)
   })
 })
+
+console.log(bot.friendList, 'bot.contacts===')

@@ -34,7 +34,7 @@ export default class WechatCore {
     this.CONF = getCONF()
     this.COOKIE = {}
     this.user = {}
-    this.botData = {}
+    this.botData = null
     if (hotRelaod) {
       this.botData = this.getCookiesFromFile()
     }
@@ -54,6 +54,9 @@ export default class WechatCore {
   }
 
   set botData (data) {
+    if (!data) {
+      return
+    }
     Object.keys(data).forEach(key => {
       Object.assign(this[key], data[key])
     })
@@ -63,12 +66,27 @@ export default class WechatCore {
     try {
       fs.statSync(storeSessionFile).isFile()
     } catch (err) {
-      console.log('WeChatCore', 'getCookiesFromFile() no cookies: %s', err.message)
+      debug('WeChatCore', 'getCookiesFromFile() no cookies => ', err.message)
       return null
     }
     const jsonStr = fs.readFileSync(storeSessionFile)
     const cookies = JSON.parse(jsonStr.toString())
     return cookies
+  }
+
+  cleanCookies () {
+    debug('WeChatCore', 'cleanCookies() file =>', storeSessionFile)
+    fs.unlinkSync(storeSessionFile)
+  }
+
+  saveCookies () {
+    try {
+      const jsonStr = JSON.stringify(this.botData)
+      fs.writeFileSync(storeSessionFile, jsonStr)
+    } catch (e) {
+      console.log('WeChatCore', 'saveCookies exception: ', e.message)
+      throw e
+    }
   }
 
   getUUID () {
@@ -156,7 +174,7 @@ export default class WechatCore {
           })
         }
         // 保存数据，将数据序列化之后保存到任意位置
-        fs.writeFileSync(storeSessionFile, JSON.stringify(this.botData))
+        this.saveCookies()
         debug('登录成功')
       })
     }).catch(err => {
@@ -183,6 +201,10 @@ export default class WechatCore {
         data: data
       }).then(res => {
         let data = res.data
+
+        // 检查是否已退出
+        this.checkExit(data.BaseResponse.Ret)
+
         assert.equal(data.BaseResponse.Ret, 0, res)
         this.PROP.skey = data.SKey || this.PROP.skey
         this.updateSyncKey(data)
@@ -344,10 +366,12 @@ export default class WechatCore {
           // eslint-disable-next-line
           eval(res.data)
         } catch (ex) {
-          window.synccheck = {retcode: '0', selector: '0'}
+          window.synccheck = { retcode: '0', selector: '0' }
         }
-        assert.equal(window.synccheck.retcode, this.CONF.SYNCCHECK_RET_SUCCESS, res)
-
+        const retcode = Number(window.synccheck.retcode)
+        // 检查是否已退出
+        this.checkExit(retcode)
+        assert.equal(retcode, this.CONF.SYNCCHECK_RET_SUCCESS, res)
         return window.synccheck.selector
       })
     }).catch(err => {
@@ -406,6 +430,14 @@ export default class WechatCore {
         synckeylist.push(e[o]['Key'] + '_' + e[o]['Val'])
       }
       this.PROP.formatedSyncKey = synckeylist.join('|')
+    }
+  }
+
+  checkExit (retcode) {
+    if (retcode === this.CONF.LOGIN_OTHERWHERE || retcode === this.CONF.LOGIN_OUT || retcode === this.CONF.MOBILE_LOGIN_OUT) {
+      debug(`retcode: ${retcode}`)
+      this.cleanCookies()
+      process.exit(0)
     }
   }
 
@@ -830,9 +862,6 @@ export default class WechatCore {
             `$1${msg.MediaId}$2`)
           break
         default:
-          if (msg.MsgType !== this.CONF.MM_DATA_STATUSNOTIFY) {
-            throw new Error('该消息类型不能直接转发=>' + msg.MsgType)
-          }
           break
       }
       if (!url) {

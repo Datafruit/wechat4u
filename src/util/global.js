@@ -101,4 +101,4 @@ export const RetCode = {
 /**
  * 登录状态保存文件
  */
-export const storeSessionFile = 'store-wecaht.session.json'
+export const storeSessionFile = './store-wecaht.session.json'

@@ -23,6 +23,7 @@ class Wechat extends WechatCore {
     _.extend(this, new EventEmitter())
     this.state = this.CONF.STATE.init
     this.contacts = {} // 所有联系人
+    this.groupList = []
     this.Contact = ContactFactory(this)
     this.Message = MessageFactory(this)
     this.lastSyncTime = 0
@@ -171,7 +172,13 @@ class Wechat extends WechatCore {
             this.emit('user-avatar', res.userAvatar)
           }
           if (res.code !== 200) {
-            debug('checkLogin: ', res.code)
+            if (res.code === 401) {
+              console.log('请扫描二维码')
+            } else if (res.code === 201) {
+              console.log('请在手机上点击确认')
+            } else {
+              debug('checkLogin => ', res.code)
+            }
             return checkLogin()
           } else {
             return res
