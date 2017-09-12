@@ -11,7 +11,7 @@ let bot
  * 这里演示从本地文件中获取数据
  */
 try {
-  bot = new Wechat(true)
+  bot = new Wechat()
 } catch (e) {
   console.log(e.stack)
 }
@@ -28,12 +28,12 @@ if (bot.PROP.uin) {
 /**
  * uuid事件，参数为uuid，根据uuid生成二维码
  */
-bot.on('uuid', uuid => {
-  qrcode.generate('https://login.weixin.qq.com/l/' + uuid, {
-    small: true
-  })
-  console.log('请扫描二维码登录')
-})
+// bot.on('uuid', uuid => {
+//   qrcode.generate('https://login.weixin.qq.com/l/' + uuid, {
+//     small: true
+//   })
+//   console.log('请扫描二维码登录')
+// })
 /**
  * 登录用户头像事件，手机扫描后可以得到登录用户头像的Data URL
  */
@@ -43,22 +43,15 @@ bot.on('uuid', uuid => {
 /**
  * 登录成功事件
  */
-bot.on('login', () => {
-  console.log('登录成功')
-  // 保存数据，将数据序列化之后保存到任意位置
-  // fs.writeFileSync(syncDataPath, JSON.stringify(bot.botData))
-})
+// bot.on('login', () => {
+//   console.log('登录成功')
+// })
 /**
  * 登出成功事件
  */
-bot.on('logout', () => {
-  console.log('登出成功')
-  // if (fs.exists(syncDataPath)) {
-  //   console.log('clear sync-data')
-  //   // 清除数据
-  //   fs.unlinkSync(syncDataPath)
-  // }
-})
+// bot.on('logout', () => {
+//   console.log('登出成功')
+// })
 /**
  * 联系人更新事件，参数为被更新的联系人列表
  */
@@ -308,20 +301,18 @@ bot.on('message', msg => {
  */
 bot.on('message', msg => {
   // 不是所有消息都可以直接转发
+  console.log('转发：', msg.OriginalContent)
   bot.forwardMsg(msg, 'filehelper')
-    .catch(err => {
-      bot.emit('error', err)
-    })
 })
 /**
  * 如何获取联系人头像
  */
-bot.on('message', msg => {
-  bot.getHeadImg(bot.contacts[msg.FromUserName].HeadImgUrl).then(res => {
-    fs.writeFileSync(`./media/${msg.FromUserName}.jpg`, res.data)
-  }).catch(err => {
-    bot.emit('error', err)
-  })
-})
+// bot.on('message', msg => {
+//   bot.getHeadImg(bot.contacts[msg.FromUserName].HeadImgUrl).then(res => {
+//     fs.writeFileSync(`./media/${msg.FromUserName}.jpg`, res.data)
+//   }).catch(err => {
+//     bot.emit('error', err)
+//   })
+// })
 
-console.log(bot.friendList, 'bot.contacts===')
+

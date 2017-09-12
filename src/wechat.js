@@ -1,5 +1,6 @@
 import WechatCore from './core'
 import EventEmitter from 'events'
+const qrcode = require('qrcode-terminal')
 import _ from 'lodash'
 import {
   getCONF,
@@ -18,7 +19,7 @@ if (!isStandardBrowserEnv) {
 
 class Wechat extends WechatCore {
 
-  constructor (hotReload = false) {
+  constructor (hotReload = true) {
     super(hotReload)
     _.extend(this, new EventEmitter())
     this.state = this.CONF.STATE.init
@@ -35,7 +36,7 @@ class Wechat extends WechatCore {
 
   get friendList () {
     let members = []
-
+    console.log(this.contacts.length, 'this.contacts===');
     for (let key in this.contacts) {
       let member = this.contacts[key]
       members.push({
@@ -49,47 +50,44 @@ class Wechat extends WechatCore {
     return members
   }
 
-  sendMsg (msg, toUserName) {
+  async sendMsg (msg, toUserName) {
     if (typeof msg !== 'object') {
-      return this.sendText(msg, toUserName)
+      return await this.sendText(msg, toUserName)
     } else if (msg.emoticonMd5) {
-      return this.sendEmoticon(msg.emoticonMd5, toUserName)
+      return await this.sendEmoticon(msg.emoticonMd5, toUserName)
     } else {
-      return this.uploadMedia(msg.file, msg.filename, toUserName)
-        .then(res => {
-          switch (res.ext) {
-            case 'bmp':
-            case 'jpeg':
-            case 'jpg':
-            case 'png':
-              return this.sendPic(res.mediaId, toUserName)
-            case 'gif':
-              return this.sendEmoticon(res.mediaId, toUserName)
-            case 'mp4':
-              return this.sendVideo(res.mediaId, toUserName)
-            default:
-              return this.sendDoc(res.mediaId, res.name, res.size, res.ext, toUserName)
-          }
-        })
+      const res = this.uploadMedia(msg.file, msg.filename, toUserName)
+      switch (res.ext) {
+        case 'bmp':
+        case 'jpeg':
+        case 'jpg':
+        case 'png':
+          return await this.sendPic(res.mediaId, toUserName)
+        case 'gif':
+          return await this.sendEmoticon(res.mediaId, toUserName)
+        case 'mp4':
+          return await this.sendVideo(res.mediaId, toUserName)
+        default:
+          return await this.sendDoc(res.mediaId, res.name, res.size, res.ext, toUserName)
+      }
     }
   }
 
-  syncPolling (id = ++this.syncPollingId) {
+  async syncPolling (id = ++this.syncPollingId) {
     if (this.state !== this.CONF.STATE.login || this.syncPollingId !== id) {
       return
     }
-    this.syncCheck().then(selector => {
+    try {
+      const selector = await this.syncCheck()
       debug('Sync Check Selector: ', selector)
       if (+selector !== this.CONF.SYNCCHECK_SELECTOR_NORMAL) {
-        return this.sync().then(data => {
-          this.syncErrorCount = 0
-          this.handleSync(data)
-        })
+        const data = await this.sync()
+        this.syncErrorCount = 0
+        await this.handleSync(data)
       }
-    }).then(() => {
       this.lastSyncTime = Date.now()
-      this.syncPolling(id)
-    }).catch(err => {
+      await this.syncPolling(id)
+    } catch (err) {
       if (this.state !== this.CONF.STATE.login) {
         return
       }
@@ -105,144 +103,143 @@ class Wechat extends WechatCore {
         clearTimeout(this.retryPollingId)
         this.retryPollingId = setTimeout(() => this.syncPolling(id), 2000 * this.syncErrorCount)
       }
-    })
+    }
   }
 
-  _getContact (Seq = 0) {
+  async _getContact (Seq = 0) {
     let contacts = []
-    return this.getContact(Seq)
-    .then(res => {
+    try {
+      const res = await this.getContact(Seq)
       contacts = res.MemberList || []
+      // 查看seq是否为0，0表示好友列表已全部获取完毕，若大于0，则表示好友列表未获取完毕，当前的字节数（断点续传）
       if (res.Seq) {
-        return this._getContact(res.Seq).then(_contacts => {
-          contacts = contacts.concat(_contacts || [])
-          return contacts
-        })
+        const _contacts = await this._getContact(res.Seq)
+        contacts = contacts.concat(_contacts || [])
+        return contacts
       }
-    })
-    .then(() => {
       if (Seq === 0) {
         let emptyGroup = contacts.filter(contact => contact.UserName.startsWith('@@') && contact.MemberCount === 0) || []
         if (emptyGroup.length !== 0) {
-          return this.batchGetContact(emptyGroup).then(_contacts => {
-            contacts = contacts.concat(_contacts || [])
-            return contacts
-          })
-        } else {
-          return contacts
+          const _contacts = await this.batchGetContact(emptyGroup)
+          contacts = contacts.concat(_contacts || [])
         }
-      } else {
-        return contacts
       }
-    })
-    .catch(err => {
+      return contacts
+    } catch (err) {
       this.emit('error', err)
       return contacts
-    })
-  }
-
-  _init () {
-    return this.init()
-    .then(data => {
-      // this.getContact() 这个接口返回通讯录中的联系人（包括已保存的群聊）
-      // 临时的群聊会话在初始化的接口中可以获取，因此这里也需要更新一遍 contacts
-      // 否则后面可能会拿不到某个临时群聊的信息
-      this.updateContacts(data.ContactList)
-
-      this.notifyMobile()
-      .catch(err => this.emit('error', err))
-      this._getContact()
-      .then(contacts => {
-        debug('getContact count: ', contacts.length)
-        this.updateContacts(contacts)
-      })
-      this.state = this.CONF.STATE.login
-      this.lastSyncTime = Date.now()
-      this.syncPolling()
-      this.checkPolling()
-      this.emit('login')
-    })
-  }
-
-  _login () {
-    const checkLogin = () => {
-      return this.checkLogin()
-        .then(res => {
-          if (res.code === 201 && res.userAvatar) {
-            this.emit('user-avatar', res.userAvatar)
-          }
-          if (res.code !== 200) {
-            if (res.code === 401) {
-              console.log('请扫描二维码')
-            } else if (res.code === 201) {
-              console.log('请在手机上点击确认')
-            } else {
-              debug('checkLogin => ', res.code)
-            }
-            return checkLogin()
-          } else {
-            return res
-          }
-        })
     }
-    return this.getUUID()
-      .then(uuid => {
-        debug('getUUID: ', uuid)
-        this.emit('uuid', uuid)
-        this.state = this.CONF.STATE.uuid
-        return checkLogin()
-      })
-      .then(res => {
-        debug('checkLogin: ', res.redirect_uri)
-        return this.login()
-      })
   }
 
-  start () {
-    debug('启动中...')
-    return this._login()
-      .then(() => this._init())
-      .catch(err => {
-        debug(err)
-        this.emit('error', err)
-        this.stop()
-      })
+  async _init () {
+    const data = await this.init()
+    // this.getContact() 这个接口返回通讯录中的联系人（包括已保存的群聊）
+    // 临时的群聊会话在初始化的接口中可以获取，因此这里也需要更新一遍 contacts
+    // 否则后面可能会拿不到某个临时群聊的信息
+    this.updateContacts(data.ContactList)
+    try {
+      debug("开启微信状态通知")
+      await this.notifyMobile()
+    } catch (err) {
+      this.emit('error', err)
+    }
+    const contacts = await this._getContact()
+    debug('getContact count: ', contacts.length)
+    this.updateContacts(contacts)
+    this.state = this.CONF.STATE.login
+    this.lastSyncTime = Date.now()
+    await this.syncPolling()
+    await this.checkPolling()
+    this.emit('login')
   }
 
-  restart () {
-    debug('重启中...')
-    return this._init()
-      .catch(err => {
-        if (err.response) {
-          throw err
+  async _login () {
+    const handlerQRLogin = async () => {
+      const res = await this.checkLogin()
+      if (res.code === 201 && res.userAvatar) {
+        this.emit('user-avatar', res.userAvatar)
+      }
+      if (res.code !== 200) {
+        if (res.code === 401) {
+          console.log('请扫描二维码')
+        } else if (res.code === 201) {
+          console.log('请点击微信确认按钮，进行登陆')
         } else {
-          let err = new Error('重启时网络错误，60s后进行最后一次重启')
-          debug(err)
-          this.emit('error', err)
-          return new Promise(resolve => {
-            setTimeout(resolve, 60 * 1000)
-          }).then(() => this.init())
-            .then(data => {
-              this.updateContacts(data.ContactList)
-            })
+          debug('handlerQRLogin => ', res.code)
         }
-      }).catch(err => {
-        debug(err)
-        this.emit('error', err)
-        this.stop()
+        return await handlerQRLogin()
+      }
+      return res
+    }
+    try {
+      const uuid = await this.getUUID()
+      debug('getUUID: ', uuid)
+      this.emit('uuid', uuid)
+      console.log('请扫描二维码登录')
+      qrcode.generate('https://login.weixin.qq.com/l/' + uuid, {
+        small: true
       })
+      this.state = this.CONF.STATE.uuid
+      const res = await handlerQRLogin()
+      debug('handlerQRLogin: ', res.redirect_uri)
+      return await this.login()
+    } catch (err) {
+      debug(err)
+      console.log('微信登陆异常:', err.message)
+    }
   }
 
-  stop () {
+  async start () {
+    try {
+      debug('启动中...')
+      await this._login()
+      await this._init()
+    } catch (err) {
+      debug(err)
+      this.emit('error', err)
+      this.stop()
+    }
+  }
+
+  async restart () {
+    try {
+      debug('重启中...')
+      await this._init()
+    } catch (err) {
+      if (err.response) {
+        throw err
+      }
+      let err = new Error('重启时网络错误，60s后进行最后一次重启')
+      debug(err)
+      this.emit('error', err)
+      await new Promise(resolve => {
+        setTimeout(resolve, 60 * 1000)
+      })
+      try {
+        const data = await this.init()
+        this.updateContacts(data.ContactList)
+      } catch (err) {
+        debug(err)
+        this.emit('error', err)
+        await this.stop()
+      }
+    }
+  }
+
+  async stop () {
     debug('登出中...')
     clearTimeout(this.retryPollingId)
     clearTimeout(this.checkPollingId)
-    this.logout()
+    await this.logout()
     this.state = this.CONF.STATE.logout
     this.emit('logout')
   }
 
-  checkPolling () {
+  /**
+   * 检测状态并发送心态
+   * @memberof Wechat
+   */
+  async checkPolling () {
     if (this.state !== this.CONF.STATE.login) {
       return
     }
@@ -254,30 +251,27 @@ class Wechat extends WechatCore {
       clearTimeout(this.checkPollingId)
       setTimeout(() => this.restart(), 5 * 1000)
     } else {
-      debug('心跳')
-      this.notifyMobile()
-      .catch(err => {
+      debug('发送心跳')
+      try {
+        await this.notifyMobile()
+        await this.sendMsg(this._getPollingMessage(), this._getPollingTarget())
+      } catch (err) {
         debug(err)
         this.emit('error', err)
-      })
-      this.sendMsg(this._getPollingMessage(), this._getPollingTarget())
-      .catch(err => {
-        debug(err)
-        this.emit('error', err)
-      })
+      }
       clearTimeout(this.checkPollingId)
       this.checkPollingId = setTimeout(() => this.checkPolling(), this._getPollingInterval())
     }
   }
 
-  handleSync (data) {
+  async handleSync (data) {
     if (!data) {
-      this.restart()
+      await this.restart()
       return
     }
     if (data.AddMsgCount) {
       debug('syncPolling messages count: ', data.AddMsgCount)
-      this.handleMsg(data.AddMsgList)
+      await this.handleMsg(data.AddMsgList)
     }
     if (data.ModContactCount) {
       debug('syncPolling ModContactList count: ', data.ModContactCount)
@@ -285,51 +279,48 @@ class Wechat extends WechatCore {
     }
   }
 
-  handleMsg (data) {
-    data.forEach(msg => {
-      Promise.resolve().then(() => {
+  async handleMsg (data) {
+    try {
+      for (let msg of data) {
         if (!this.contacts[msg.FromUserName] ||
-          (msg.FromUserName.startsWith('@@') && this.contacts[msg.FromUserName].MemberCount === 0)) {
-          return this.batchGetContact([{
-            UserName: msg.FromUserName
-          }]).then(contacts => {
-            this.updateContacts(contacts)
-          }).catch(err => {
-            debug(err)
-            this.emit('error', err)
-          })
+          (msg.FromUserName.startsWith('@@') &&
+          this.contacts[msg.FromUserName].MemberCount === 0)) {
+          let contacts = await this.batchGetContact([{UserName: msg.FromUserName}])
+          this.updateContacts(contacts)
         }
-      }).then(() => {
         msg = this.Message.extend(msg)
         this.emit('message', msg)
         if (msg.MsgType === this.CONF.MSGTYPE_STATUSNOTIFY) {
-          let userList = msg.StatusNotifyUserName.split(',').filter(UserName => !this.contacts[UserName])
+          let userList = msg.StatusNotifyUserName.split(',')
+          .filter(UserName => !this.contacts[UserName])
           .map(UserName => {
-            return {
-              UserName: UserName
-            }
+            return { UserName: UserName }
           })
-          Promise.all(_.chunk(userList, 50).map(list => {
-            return this.batchGetContact(list).then(res => {
-              debug('batchGetContact data length: ', res.length)
-              this.updateContacts(res)
+          for (let list of _.chunk(userList, 50)) {
+            let contacts = await this.batchGetContact(list)
+            contacts.forEach( co => {
+              console.log(co.UserName, co.NickName, 'cooo====')
             })
-          })).catch(err => {
-            debug(err)
-            this.emit('error', err)
-          })
+            debug('batchGetContact data length: ', contacts.length)
+            this.updateContacts(contacts)
+          }
         }
         if (msg.ToUserName === 'filehelper' && msg.Content === '退出wechat4u' ||
           /^(.\udf1a\u0020\ud83c.){3}$/.test(msg.Content)) {
-          this.stop()
+          await this.stop()
         }
-      }).catch(err => {
-        this.emit('error', err)
-        debug(err)
-      })
-    })
+      } // end for
+    } catch (err) {
+      this.emit('error', err)
+      debug(err)
+    }
   }
 
+  /**
+   * 更新联系人
+   * @param {any} contacts 
+   * @memberof Wechat
+   */
   updateContacts (contacts) {
     if (!contacts || contacts.length === 0) {
       return
