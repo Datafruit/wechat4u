@@ -191,7 +191,7 @@ export function getCONF (host) {
 
   let conf = {}
   conf.origin = origin
-  conf.API_login_uri = `https://${loginUrl}`
+  conf.API_base_login = 'https://login.weixin.qq.com/l/'
   conf.baseUri = `${origin}/cgi-bin/mmwebwx-bin`
   conf.API_jsLogin = `https://${loginUrl}/jslogin?appid=wx782c26e4c19acffb&fun=new&lang=zh-CN`
   conf.API_login = `https://${loginUrl}/cgi-bin/mmwebwx-bin/login`

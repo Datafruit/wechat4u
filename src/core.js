@@ -33,18 +33,27 @@ export default class WechatCore {
     }
     this.CONF = getCONF()
     this.COOKIE = {}
-    this.user = {}
-    this.botData = null
+    this.user = {}                // 当前登录用户信息
+    this.storeData = null         // 保存当前登录数据信息
     if (hotRelaod) {
-      this.botData = this.getCookiesFromFile()
+      this.storeData = this.getCookiesFromFile()
     }
+    this.online = false            // 是否在线
+    this.memberList = []           // 好友+群聊+公众号+特殊账号
+    this.contactList = []          // 好友
+    this.groupList = []            // 群
+    this.groupMemeberMap = []      // 群聊成员字典
+    this.publicUsersList = []      // 公众号／服务号
+    this.specialUsersList = []     // 特殊账号
+    this.groupIdList = []          // 群ID列表
+    this.groupNickNameList = []    // 群NickName列表
 
     this.request = new Request({
       Cookie: this.COOKIE
     })
   }
 
-  get botData () {
+  get storeData () {
     return {
       PROP: this.PROP,
       CONF: this.CONF,
@@ -53,7 +62,7 @@ export default class WechatCore {
     }
   }
 
-  set botData (data) {
+  set storeData (data) {
     if (!data) {
       return
     }
@@ -81,7 +90,7 @@ export default class WechatCore {
 
   saveCookies () {
     try {
-      const jsonStr = JSON.stringify(this.botData)
+      const jsonStr = JSON.stringify(this.storeData)
       fs.writeFileSync(storeSessionFile, jsonStr)
     } catch (e) {
       console.log('WeChatCore', 'saveCookies exception: ', e.message)
@@ -124,7 +133,7 @@ export default class WechatCore {
     const res = await this.request({
       method: 'GET',
       url: this.CONF.API_login,
-      params: params
+      params
     })
     let window = {}
 
@@ -149,7 +158,13 @@ export default class WechatCore {
         fun: 'new'
       }
     })
+    //add by WuQic 2017-09-15
+		//如果登录被禁止时，则登录返回的message内容不为空，下面代码则判断登录内容是否为空，不为空则退出程序
     let pm = res.data.match(/<ret>(.*)<\/ret>/)
+    if (pm && pm[1] === '1203') {
+      console.log(res.data)
+      process.exit(0)
+    }
     if (pm && pm[1] === '0') {
       this.PROP.skey = res.data.match(/<skey>(.*)<\/skey>/)[1]
       this.PROP.sid = res.data.match(/<wxsid>(.*)<\/wxsid>/)[1]
@@ -191,18 +206,21 @@ export default class WechatCore {
         BaseRequest: this.getBaseRequest()
       }
     })
-    let { data } = res
+    const { data: resData }  = res
+    const { BaseResponse: { Ret }, User, ChatSet, SKey } = resData
     // 检查是否已退出
-    this.checkExit(data.BaseResponse.Ret)
-    assert.equal(data.BaseResponse.Ret, 0, res)
-    this.PROP.skey = data.SKey || this.PROP.skey
-    this.updateSyncKey(data)
-    Object.assign(this.user, data.User)
-    return data
+    this.checkExit(Ret)
+    assert.equal(Ret, 0, res)
+    this.PROP.skey = SKey || this.PROP.skey
+    this.updateSyncKey(resData)
+    Object.assign(this.user, User)
+    // 保存群id
+    this.groupIdList = ChatSet.split(',').filter(id => id.startsWith('@@'))
+    return resData
   }
 
   /**
-   * 微信状态通知
+   * 开启微信状态通知
    * @param {any} to 
    * @memberof WechatCore
    */
@@ -229,7 +247,7 @@ export default class WechatCore {
   }
 
   /**
-   * 获取通讯录
+   * 获取联系人列表
    * @param {number} [seq=0] 
    * @returns 
    * @memberof WechatCore
@@ -258,7 +276,7 @@ export default class WechatCore {
    * @returns 
    * @memberof WechatCore
    */
-  async batchGetContact (contacts) {
+  async batchGetContact () {
     let params = {
       'pass_ticket': this.PROP.passTicket,
       'type': 'ex',
@@ -267,8 +285,8 @@ export default class WechatCore {
     }
     let paramData = {
       'BaseRequest': this.getBaseRequest(),
-      'Count': contacts.length,
-      'List': contacts
+      'Count': this.groupIdList.length,
+      'List': this.groupIdList
     }
     const res = await this.request({
       method: 'POST',
@@ -320,7 +338,7 @@ export default class WechatCore {
   }
 
   /**
-   * 同步数据检测
+   * 微信消息检查
    * @returns 
    * @memberof WechatCore
    */
@@ -355,8 +373,8 @@ export default class WechatCore {
   }
 
   /**
-   * 同步消息
-   * @returns 
+   * 获取最新消息
+   * @returns
    * @memberof WechatCore
    */
   async sync () {
@@ -384,6 +402,11 @@ export default class WechatCore {
     return data
   }
 
+  /**
+   * 保存登录同步信息
+   * @param {any} data 
+   * @memberof WechatCore
+   */
   updateSyncKey (data) {
     if (data.SyncKey) {
       this.PROP.syncKey = data.SyncKey
@@ -404,7 +427,9 @@ export default class WechatCore {
   }
 
   checkExit (retcode) {
+    this.online = true
     if (retcode === this.CONF.LOGIN_OTHERWHERE || retcode === this.CONF.LOGIN_OUT || retcode === this.CONF.MOBILE_LOGIN_OUT) {
+      this.online = false
       debug(`微信手机端退出: ${retcode}`)
       this.cleanCookies()
       process.exit(0)
@@ -431,7 +456,7 @@ export default class WechatCore {
     await this.request({
       method: 'POST',
       url: this.CONF.API_webwxlogout,
-      params: params
+      params
     })
     if (fs.exists(storeSessionFile)) {
       console.log('clear hot-realod data')

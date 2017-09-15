@@ -52,7 +52,7 @@ export const assert = {
     try {
       Assert.equal(actual, expected)
     } catch (e) {
-      debug(e)
+      debug(e.message)
       delete response.request
       e.response = response
       throw e

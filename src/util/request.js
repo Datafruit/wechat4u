@@ -9,7 +9,7 @@ export function Request (defaults) {
   defaults = defaults || {}
   defaults.headers = defaults.headers || {}
   if (!isStandardBrowserEnv) {
-    defaults.headers['user-agent'] = defaults.headers['user-agent'] || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36'
+    defaults.headers['user-agent'] = defaults.headers['user-agent'] || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.79 Safari/537.36'
     defaults.headers['connection'] = defaults.headers['connection'] || 'close'
   }
 
@@ -28,6 +28,7 @@ export function Request (defaults) {
       }).join('; ')
       return config
     }, err => {
+      console.log(err.message, '=err2222r');
       return Promise.reject(err)
     })
     this.axios.interceptors.response.use(res => {
@@ -42,6 +43,7 @@ export function Request (defaults) {
       }
       return res
     }, err => {
+      console.log(err.message, '=errr');
       if (err && err.response) {
         delete err.response.request
         delete err.response.config

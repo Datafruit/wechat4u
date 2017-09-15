@@ -36,7 +36,6 @@ class Wechat extends WechatCore {
 
   get friendList () {
     let members = []
-    console.log(this.contacts.length, 'this.contacts===');
     for (let key in this.contacts) {
       let member = this.contacts[key]
       members.push({
@@ -56,7 +55,7 @@ class Wechat extends WechatCore {
     } else if (msg.emoticonMd5) {
       return await this.sendEmoticon(msg.emoticonMd5, toUserName)
     } else {
-      const res = this.uploadMedia(msg.file, msg.filename, toUserName)
+      const res = await this.uploadMedia(msg.file, msg.filename, toUserName)
       switch (res.ext) {
         case 'bmp':
         case 'jpeg':
@@ -99,14 +98,14 @@ class Wechat extends WechatCore {
         this.emit('error', err)
         clearTimeout(this.retryPollingId)
         setTimeout(() => this.restart(), 5 * 1000)
-      } else {
-        clearTimeout(this.retryPollingId)
-        this.retryPollingId = setTimeout(() => this.syncPolling(id), 2000 * this.syncErrorCount)
+        return
       }
+      clearTimeout(this.retryPollingId)
+      this.retryPollingId = setTimeout(() => this.syncPolling(id), 2000 * this.syncErrorCount)
     }
   }
 
-  async _getContact (Seq = 0) {
+  async _getContact(Seq = 0) {
     let contacts = []
     try {
       const res = await this.getContact(Seq)
@@ -138,7 +137,7 @@ class Wechat extends WechatCore {
     // 否则后面可能会拿不到某个临时群聊的信息
     this.updateContacts(data.ContactList)
     try {
-      debug("开启微信状态通知")
+      debug('开启微信状态通知')
       await this.notifyMobile()
     } catch (err) {
       this.emit('error', err)
@@ -176,7 +175,7 @@ class Wechat extends WechatCore {
       debug('getUUID: ', uuid)
       this.emit('uuid', uuid)
       console.log('请扫描二维码登录')
-      qrcode.generate('https://login.weixin.qq.com/l/' + uuid, {
+      qrcode.generate(this.CONF.API_base_login + uuid, {
         small: true
       })
       this.state = this.CONF.STATE.uuid
@@ -209,8 +208,8 @@ class Wechat extends WechatCore {
       if (err.response) {
         throw err
       }
+      debug(err.message)
       let err = new Error('重启时网络错误，60s后进行最后一次重启')
-      debug(err)
       this.emit('error', err)
       await new Promise(resolve => {
         setTimeout(resolve, 60 * 1000)
@@ -236,7 +235,7 @@ class Wechat extends WechatCore {
   }
 
   /**
-   * 检测状态并发送心态
+   * 检测状态并发送心跳
    * @memberof Wechat
    */
   async checkPolling () {
@@ -285,7 +284,7 @@ class Wechat extends WechatCore {
         if (!this.contacts[msg.FromUserName] ||
           (msg.FromUserName.startsWith('@@') &&
           this.contacts[msg.FromUserName].MemberCount === 0)) {
-          let contacts = await this.batchGetContact([{UserName: msg.FromUserName}])
+          let contacts = await this.batchGetContact([{ UserName: msg.FromUserName, EncryChatRoomId: '' }])
           this.updateContacts(contacts)
         }
         msg = this.Message.extend(msg)
@@ -294,13 +293,10 @@ class Wechat extends WechatCore {
           let userList = msg.StatusNotifyUserName.split(',')
           .filter(UserName => !this.contacts[UserName])
           .map(UserName => {
-            return { UserName: UserName }
+            return { UserName: UserName, EncryChatRoomId: '' }
           })
           for (let list of _.chunk(userList, 50)) {
             let contacts = await this.batchGetContact(list)
-            contacts.forEach( co => {
-              console.log(co.UserName, co.NickName, 'cooo====')
-            })
             debug('batchGetContact data length: ', contacts.length)
             this.updateContacts(contacts)
           }
