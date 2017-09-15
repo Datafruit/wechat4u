@@ -158,19 +158,19 @@ export default class WechatCore {
         fun: 'new'
       }
     })
-    //add by WuQic 2017-09-15
-		//如果登录被禁止时，则登录返回的message内容不为空，下面代码则判断登录内容是否为空，不为空则退出程序
     let pm = res.data.match(/<ret>(.*)<\/ret>/)
-    if (pm && pm[1] === '1203') {
-      console.log(res.data)
-      process.exit(0)
-    }
     if (pm && pm[1] === '0') {
       this.PROP.skey = res.data.match(/<skey>(.*)<\/skey>/)[1]
       this.PROP.sid = res.data.match(/<wxsid>(.*)<\/wxsid>/)[1]
       this.PROP.uin = res.data.match(/<wxuin>(.*)<\/wxuin>/)[1]
       this.PROP.passTicket = res.data.match(/<pass_ticket>(.*)<\/pass_ticket>/)[1]
+    } else {
+      //add by WuQic 2017-09-15
+      //如果登录被禁止时，则登录返回的message内容不为空，下面代码则判断登录内容是否为空，不为空则退出程序
+      console.log(res.data)
+      process.exit(0)
     }
+
     if (res.headers['set-cookie']) {
       res.headers['set-cookie'].forEach(item => {
         if (/webwx.*?data.*?ticket/i.test(item)) {
