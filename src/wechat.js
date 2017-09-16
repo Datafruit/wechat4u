@@ -114,19 +114,19 @@ class Wechat extends WechatCore {
       if (res.Seq) {
         const _contacts = await this._getContact(res.Seq)
         contacts = contacts.concat(_contacts || [])
-        return contacts
+        return _.uniqBy(contacts, c => c.UserName)
       }
       if (Seq === 0) {
         let emptyGroup = contacts.filter(contact => contact.UserName.startsWith('@@') && contact.MemberCount === 0) || []
-        if (emptyGroup.length !== 0) {
+        if (emptyGroup.length > 0) {
           const _contacts = await this.batchGetContact(emptyGroup)
           contacts = contacts.concat(_contacts || [])
         }
       }
-      return contacts
+      return _.uniqBy(contacts, c => c.UserName)
     } catch (err) {
       this.emit('error', err)
-      return contacts
+      return _.uniqBy(contacts, c => c.UserName)
     }
   }
 
@@ -135,6 +135,11 @@ class Wechat extends WechatCore {
     // this.getContact() 这个接口返回通讯录中的联系人（包括已保存的群聊）
     // 临时的群聊会话在初始化的接口中可以获取，因此这里也需要更新一遍 contacts
     // 否则后面可能会拿不到某个临时群聊的信息
+    let emptyGroup = data.ContactList.filter(contact => contact.UserName.startsWith('@@'))
+    if (emptyGroup.length > 0) {
+      const groupContact = await this.batchGetContact(emptyGroup)
+      data.ContactList = data.ContactList.concat(groupContact || [])
+    }
     this.updateContacts(data.ContactList)
     try {
       debug('开启微信状态通知')
@@ -143,12 +148,13 @@ class Wechat extends WechatCore {
       this.emit('error', err)
     }
     const contacts = await this._getContact()
-    debug('getContact count: ', contacts.length)
+    debug('获取联系人总数: ', contacts.length)
     this.updateContacts(contacts)
     this.state = this.CONF.STATE.login
+    this.online = true
     this.lastSyncTime = Date.now()
-    await this.syncPolling()
-    await this.checkPolling()
+    this.syncPolling()
+    this.checkPolling()
     this.emit('login')
   }
 
@@ -231,6 +237,7 @@ class Wechat extends WechatCore {
     clearTimeout(this.checkPollingId)
     await this.logout()
     this.state = this.CONF.STATE.logout
+    this.online = false
     this.emit('logout')
   }
 
@@ -249,18 +256,18 @@ class Wechat extends WechatCore {
       this.emit('error', err)
       clearTimeout(this.checkPollingId)
       setTimeout(() => this.restart(), 5 * 1000)
-    } else {
-      debug('发送心跳')
-      try {
-        await this.notifyMobile()
-        await this.sendMsg(this._getPollingMessage(), this._getPollingTarget())
-      } catch (err) {
-        debug(err)
-        this.emit('error', err)
-      }
-      clearTimeout(this.checkPollingId)
-      this.checkPollingId = setTimeout(() => this.checkPolling(), this._getPollingInterval())
+      return
     }
+    debug('发送心跳')
+    try {
+      await this.notifyMobile()
+      await this.sendMsg(this._getPollingMessage(), this._getPollingTarget())
+    } catch (err) {
+      debug(err)
+      this.emit('error', err)
+    }
+    clearTimeout(this.checkPollingId)
+    this.checkPollingId = setTimeout(() => this.checkPolling(), this._getPollingInterval())
   }
 
   async handleSync (data) {
@@ -269,21 +276,24 @@ class Wechat extends WechatCore {
       return
     }
     if (data.AddMsgCount) {
-      debug('syncPolling messages count: ', data.AddMsgCount)
+      debug('同步更新消息数: ', data.AddMsgCount)
       await this.handleMsg(data.AddMsgList)
     }
     if (data.ModContactCount) {
-      debug('syncPolling ModContactList count: ', data.ModContactCount)
+      debug('同步更新联系人数: ', data.ModContactCount)
       this.updateContacts(data.ModContactList)
     }
+    // data.ModChatRoomMemberList
+    // data.DelContactCount
+    // data.DelContactList
+    // data.ModChatRoomMemberCount
   }
 
   async handleMsg (data) {
     try {
       for (let msg of data) {
         if (!this.contacts[msg.FromUserName] ||
-          (msg.FromUserName.startsWith('@@') &&
-          this.contacts[msg.FromUserName].MemberCount === 0)) {
+          (msg.FromUserName.startsWith('@@') && this.contacts[msg.FromUserName].MemberCount === 0)) {
           let contacts = await this.batchGetContact([{ UserName: msg.FromUserName, EncryChatRoomId: '' }])
           this.updateContacts(contacts)
         }

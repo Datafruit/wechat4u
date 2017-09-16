@@ -214,6 +214,7 @@ export default class WechatCore {
     this.PROP.skey = SKey || this.PROP.skey
     this.updateSyncKey(resData)
     Object.assign(this.user, User)
+    this.online = true
     // 保存群id
     this.groupIdList = ChatSet.split(',').filter(id => id.startsWith('@@'))
     return resData
@@ -276,7 +277,7 @@ export default class WechatCore {
    * @returns 
    * @memberof WechatCore
    */
-  async batchGetContact () {
+  async batchGetContact (contacts) {
     let params = {
       'pass_ticket': this.PROP.passTicket,
       'type': 'ex',
@@ -285,8 +286,8 @@ export default class WechatCore {
     }
     let paramData = {
       'BaseRequest': this.getBaseRequest(),
-      'Count': this.groupIdList.length,
-      'List': this.groupIdList
+      'Count': contacts ? contacts.length : this.groupIdList.length,
+      'List': contacts ? contacts : this.groupIdList
     }
     const res = await this.request({
       method: 'POST',
@@ -345,6 +346,7 @@ export default class WechatCore {
   async syncCheck () {
     let params = {
       'r': +new Date(),
+      '_': +new Date(),
       'sid': this.PROP.sid,
       'uin': this.PROP.uin,
       'skey': this.PROP.skey,

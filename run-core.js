@@ -1,7 +1,6 @@
 'use strict'
 require('babel-register')
 const Wechat = require('./src/wechat.js')
-const qrcode = require('qrcode-terminal')
 const fs = require('fs')
 const request = require('request')
 
@@ -55,17 +54,17 @@ if (bot.PROP.uin) {
 /**
  * 联系人更新事件，参数为被更新的联系人列表
  */
-bot.on('contacts-updated', contacts => {
-  // console.log(contacts)
-  const groupList = contacts.filter(m => m.UserName.startsWith('@@'))
-  for (const obj of groupList) {
-    if (obj.NickName) {
-      console.log(obj.UserName, obj.NickName)
-      // console.log(obj, '======')
-    }
-  }
-  console.log('联系人数量：', Object.keys(bot.contacts).length)
-})
+// bot.on('contacts-updated', contacts => {
+//   // console.log(contacts)
+//   const groupList = contacts.filter(m => m.UserName.startsWith('@@'))
+//   for (const obj of groupList) {
+//     if (obj.NickName) {
+//       console.log(obj.UserName, obj.NickName)
+//       // console.log(obj, '======')
+//     }
+//   }
+//   console.log('联系人数量：', Object.keys(bot.contacts).length)
+// })
 /**
  * 错误事件，参数一般为Error对象
  */
@@ -75,7 +74,15 @@ bot.on('error', err => {
 /**
  * 如何发送消息
  */
-bot.on('login', () => {
+bot.on('login', async () => {
+
+  // const lst = await bot._getContact()
+  // for (let contact of lst) {
+  //   // const contact = bot.contacts[key]
+  //   if (contact.UserName.startsWith('@@')) {
+  //     console.log('contact => ', contact.NickName, contact.UserName)
+  //   }
+  // }
   /**
    * 演示发送消息到文件传输助手
    * 通常回复消息时可以用 msg.FromUserName
@@ -178,6 +185,12 @@ bot.on('message', msg => {
    * 获取消息时间
    */
   console.log(`----------${msg.getDisplayTime()}----------`)
+  // for (let key of Object.keys(bot.contacts)) {
+  //   const contact = bot.contacts[key]
+  //   if (contact.UserName.startsWith('@@')) {
+  //     console.log('contact => ', contact.NickName, contact.UserName)
+  //   }
+  // }
   /**
    * 获取消息发送者的显示名
    */
@@ -299,11 +312,11 @@ bot.on('message', msg => {
 /**
  * 如何直接转发消息
  */
-bot.on('message', msg => {
-  // 不是所有消息都可以直接转发
-  console.log('转发：', msg.OriginalContent)
-  bot.forwardMsg(msg, 'filehelper')
-})
+// bot.on('message', msg => {
+//   // 不是所有消息都可以直接转发
+//   console.log('转发：', msg.OriginalContent)
+//   bot.forwardMsg(msg, 'filehelper')
+// })
 /**
  * 如何获取联系人头像
  */
